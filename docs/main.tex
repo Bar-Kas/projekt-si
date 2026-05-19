@@ -1,0 +1,192 @@
+\documentclass[12pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[polish]{babel}
+\usepackage{geometry}
+\geometry{a4paper, margin=2.5cm}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{hyperref}
+
+\lstset{
+    basicstyle=\ttfamily\footnotesize,
+    backgroundcolor=\color{gray!10},
+    frame=single,
+    breaklines=true,
+    showstringspaces=false,
+    language=Python,
+    commentstyle=\color{green!50!black},
+    keywordstyle=\color{blue},
+    stringstyle=\color{red!70!black},
+}
+
+\begin{document}
+
+% ===================== STRONA TYTUŁOWA =====================
+\thispagestyle{empty}
+\begin{center}
+\begin{tabular}{|p{5cm}|p{9cm}|}
+\hline
+\textbf{Uczelnia} & Politechnika Bydgoska im. J. J. Śniadeckich \\ \hline
+\textbf{Wydział} & Telekomunikacji, Informatyki i Elektrotechniki \\ \hline
+\textbf{Przedmiot} & Sztuczna Inteligencja \\ \hline
+\textbf{Tytuł projektu} & System AI do gry w Kuhn Poker oparty na sieci neuronowej i algorytmie genetycznym \\ \hline
+\textbf{Autorzy} & [Imię i Nazwisko 1] \newline [Imię i Nazwisko 2] \\ \hline
+\textbf{Grupa} & 4 \\ \hline
+\textbf{Data} & \today \\ \hline
+\textbf{Prowadzący} & dr inż. Tomasz Talaśka \\ \hline
+\end{tabular}
+\end{center}
+\vfill
+\begin{center}
+\Large Rok akademicki 2025/2026
+\end{center}
+\newpage
+
+% ===================== SEKCJA 1 =====================
+\section{Cel projektu i ogólny opis}
+
+Celem projektu jest zaprojektowanie i implementacja systemu sztucznej
+inteligencji uczącego się grać w \emph{Kuhn Poker} -- uproszczoną,
+dwuosobową odmianę pokera, powszechnie wykorzystywaną w literaturze
+teorii gier jako modelowy przykład gry z niepełną informacją. Sercem
+rozwiązania jest sieć neuronowa pełniąca funkcję polityki gracza, której
+wagi są optymalizowane algorytmem genetycznym (neuroewolucja). Takie
+podejście pozwala uniknąć konieczności zbierania zbioru uczącego oraz
+różniczkowania funkcji nagrody, co jest szczególnie istotne w grach
+sekwencyjnych z elementem losowości.
+
+Projekt łączy dwa zagadnienia z programu przedmiotu: sieci neuronowe
+(temat 3) oraz algorytmy ewolucyjne wraz z systemami ekspertowymi
+(temat 4). Jako punkt odniesienia zaimplementowany został również prosty
+system ekspertowy oraz strategia Nasha o znanej postaci analitycznej,
+co umożliwia jakościową i ilościową ocenę uzyskanego agenta.
+
+\subsection*{Założenia projektowe}
+\begin{itemize}
+    \item Wariant gry: Kuhn Poker, dwóch graczy, talia trzech kart (J, Q, K).
+    \item Metoda główna: sieć neuronowa typu MLP + algorytm genetyczny.
+    \item Punkty odniesienia: agent losowy, system ekspertowy, strategia Nasha.
+    \item Miary jakości: średnia wygrana na rozdanie, krzywa zbieżności
+          fitness, wynik bezpośredniej konfrontacji ze strategiami referencyjnymi.
+    \item Język i biblioteki: Python, NumPy, DEAP (algorytm genetyczny), PyTorch (sieć neuronowa), Matplotlib (wizualizacja wyników).
+\end{itemize}
+
+\subsection*{Spodziewany wynik}
+Oczekujemy, że agent po treningu uzyska wynik zbliżony do strategii Nasha
+w konfrontacji ze słabszymi przeciwnikami (losowy, zawsze-bet, system
+ekspertowy o ograniczonych regułach), a w grze przeciwko optymalnej
+strategii Nasha jego strata na rozdanie będzie bliska teoretycznej
+wartości wyjściowej gry, czyli okolicy $-1/18 \approx -0.0556$ żetona
+na rozdanie (z perspektywy gracza działającego pierwszego).
+
+% ===================== SEKCJA 2 =====================
+\section{Dane wejściowe -- opis problemu i wyjaśnienie algorytmu}
+
+\subsection{Reguły Kuhn Poker}
+Kuhn Poker jest zredukowaną wersją pokera klasycznego, zaproponowaną
+przez Harolda W.~Kuhna w 1950 r. Reguły:
+\begin{enumerate}
+    \item Talia składa się z trzech kart: Jack (J=1), Queen (Q=2), King (K=3).
+    \item Każdy z dwóch graczy wnosi do puli 1 żeton (\emph{ante}).
+    \item Każdemu graczowi rozdawana jest jedna zakryta karta; trzecia karta pozostaje w talii.
+    \item Gracz~1 wykonuje pierwszy ruch. Dostępne akcje:
+          \emph{pass} (\texttt{p}) oraz \emph{bet} (\texttt{b}).
+          Znaczenie zależy od kontekstu: \texttt{p} to \emph{check} w sytuacji bez zakładu i \emph{fold} po zakładzie przeciwnika; \texttt{b} to \emph{bet} w sytuacji bez zakładu i \emph{call} po zakładzie przeciwnika.
+    \item Gra kończy się jednym z poniższych terminalnych ciągów akcji:
+\end{enumerate}
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+Historia & Opis & Wypłata gracza 1 \\ \midrule
+\texttt{pp}  & obaj sprawdzają        & showdown, $\pm 1$ \\
+\texttt{pbp} & P1 sprawdza, P2 bet, P1 fold & $-1$ \\
+\texttt{pbb} & P1 sprawdza, P2 bet, P1 call & showdown, $\pm 2$ \\
+\texttt{bp}  & P1 bet, P2 fold        & $+1$ \\
+\texttt{bb}  & P1 bet, P2 call        & showdown, $\pm 2$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+W \emph{showdown} wygrywa gracz posiadający wyższą kartę.
+
+\subsection{Reprezentacja danych wejściowych}
+Stan gry widoczny dla gracza składa się z dwóch elementów: jego własnej
+karty oraz dotychczasowej historii akcji. Kodujemy go w wektorze o
+długości 12:
+\begin{itemize}
+    \item Wymiary $[0,3)$: \emph{one-hot} dla karty (J, Q, K).
+    \item Wymiary $[3,6)$, $[6,9)$, $[9,12)$: \emph{one-hot} dla każdej
+          z trzech możliwych pozycji w historii akcji
+          (kategorie: brak ruchu, pass, bet).
+\end{itemize}
+Maksymalna długość historii przed terminalem to 3 akcje, zatem
+dwunastowymiarowy wektor pokrywa wszystkie sytuacje decyzyjne.
+
+\subsection{Algorytm: neuroewolucja}
+Algorytm uczenia łączy dwa komponenty:
+
+\paragraph{1. Polityka -- sieć neuronowa.}
+Sieć perceptronowa typu MLP przyjmuje na wejściu wektor stanu (12
+wymiarów), a na wyjściu generuje 2 logity odpowiadające akcjom
+\emph{pass} i \emph{bet}. Akcja wybierana jest jako $\arg\max$ z logitów.
+Wagi sieci są spłaszczane do pojedynczego wektora rzeczywistego, który
+jest genomem osobnika populacji.
+
+\paragraph{2. Optymalizacja -- algorytm genetyczny.}
+Korzystamy z biblioteki DEAP. Schemat działania:
+\begin{enumerate}
+    \item Inicjalizacja populacji $P$ losowych wektorów wag.
+    \item Dla każdego osobnika obliczana jest funkcja fitness: agent
+          gra ustaloną liczbę rozdań przeciwko puli przeciwników
+          (system ekspertowy, agent losowy, agent zawsze-bet),
+          a wynik to średnia wygrana na rozdanie. Pozycja przy stole
+          jest naprzemienna, by wyeliminować przewagę pierwszego ruchu.
+    \item Selekcja turniejowa o rozmiarze $k=3$.
+    \item Krzyżowanie \emph{blend} ($\alpha=0{,}5$).
+    \item Mutacja gaussowska ($\mu=0$, $\sigma=0{,}2$, prawdopodobieństwo per-gen $=0{,}1$).
+    \item Elityzm: najlepszy osobnik (Hall of Fame) zachowywany w każdej iteracji.
+    \item Powyższe powtarzane przez $N_\text{gen}$ generacji.
+\end{enumerate}
+
+\paragraph{Hiperparametry początkowe.}
+\begin{center}
+\begin{tabular}{lr}
+\toprule
+Parametr & Wartość \\ \midrule
+Rozmiar populacji & 60 \\
+Liczba generacji & 100 \\
+Prawdopodobieństwo krzyżowania & 0{,}7 \\
+Prawdopodobieństwo mutacji & 0{,}2 \\
+Mecze na ocenę fitness & 200 rozdań / przeciwnik \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Funkcja celu}
+Maksymalizujemy oczekiwaną wygraną na rozdanie:
+\[
+f(\theta) = \frac{1}{|\mathcal{O}|}\sum_{o \in \mathcal{O}}
+\frac{1}{N}\sum_{i=1}^{N} u_1\!\left(\pi_\theta, o, \omega_i\right),
+\]
+gdzie $\pi_\theta$ to polityka określona przez wagi $\theta$,
+$\mathcal{O}$ to pula przeciwników, $u_1$ to wypłata gracza
+prowadzonego przez $\pi_\theta$, a $\omega_i$ to losowe rozdanie kart.
+
+\subsection{Strategia referencyjna: równowaga Nasha}
+Kuhn Poker posiada jednoparametrową rodzinę równowag Nasha
+indeksowaną wartością $\alpha \in [0, 1/3]$. Dla $\alpha = 1/6$
+strategia gracza pierwszego ma postać:
+\begin{itemize}
+    \item J: \emph{bet} z prawdopodobieństwem $\alpha$, w przeciwnym razie \emph{check}.
+    \item Q: zawsze \emph{check}; w odpowiedzi na bet \emph{call} z prawdopodobieństwem $\alpha + 1/3$.
+    \item K: \emph{bet} z prawdopodobieństwem $3\alpha$.
+\end{itemize}
+Wartość gry dla gracza działającego pierwszego wynosi
+$-1/18 \approx -0{,}0556$, niezależnie od wyboru $\alpha$.
+
+\end{document}
