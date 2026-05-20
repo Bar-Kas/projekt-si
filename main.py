@@ -1,15 +1,22 @@
 """End-to-end training run.
 
-This script wires the linear-policy placeholder into the GA, runs the
-evolution for a few generations, and then evaluates the champion against
-the baseline agents. Person 2 will swap `linear_agent_from_weights` for
-a neural-network factory once the NN module is ready.
+Wires the class-based ``LinearAgent`` placeholder into the GA, runs the
+evolution, and evaluates the champion against the baseline agents.
+
+To switch to Osoba 2's neural network later, change only these lines:
+
+    from src.agent.nn_agent import NeuralAgent
+    AGENT_CLASS = NeuralAgent
+
+Everything else stays the same, because a NeuralAgent instance is callable
+just like a LinearAgent instance.
 """
 
 from __future__ import annotations
 
 import json
 
+from src.agent.linear_agent import LinearAgent
 from src.expert.baseline import (
     always_bet_agent,
     expert_agent,
@@ -18,17 +25,19 @@ from src.expert.baseline import (
 )
 from src.ga.evolution import run_evolution
 from src.ga.fitness import play_match
-from src.ga.linear_agent import WEIGHT_SIZE, linear_agent_from_weights
+
+# The agent class the GA will evolve. Swap for NeuralAgent when ready.
+AGENT_CLASS = LinearAgent
 
 
 def main() -> None:
     print("=" * 60)
-    print("Kuhn Poker - GA training (linear-policy placeholder)")
+    print(f"Kuhn Poker - GA training ({AGENT_CLASS.__name__})")
     print("=" * 60)
 
     best, log = run_evolution(
-        weight_size=WEIGHT_SIZE,
-        agent_from_weights=linear_agent_from_weights,
+        weight_size=AGENT_CLASS.WEIGHT_SIZE,
+        agent_from_weights=AGENT_CLASS,
         pop_size=60,
         generations=50,
         eval_hands=200,
@@ -37,7 +46,7 @@ def main() -> None:
 
     print(f"\nBest training fitness: {best.fitness.values[0]:+.4f}")
 
-    champion = linear_agent_from_weights(best)
+    champion = AGENT_CLASS(best)
     nash = nash_agent_factory(alpha=1 / 6, seed=999)
 
     print("\nFinal evaluation (2000 hands each, position alternated):")
@@ -54,12 +63,14 @@ def main() -> None:
         json.dump(list(best), f)
     print("\nSaved champion weights to best_weights.json")
 
-    # Save the per-generation logbook for plotting in the report.
     with open("logbook.json", "w") as f:
         json.dump(
-            [{k: float(v) for k, v in record.items() if k != "gen" and k != "nevals"}
-             | {"gen": int(record["gen"]), "nevals": int(record["nevals"])}
-             for record in log],
+            [
+                {k: float(v) for k, v in record.items()
+                 if k not in ("gen", "nevals")}
+                | {"gen": int(record["gen"]), "nevals": int(record["nevals"])}
+                for record in log
+            ],
             f,
         )
     print("Saved generation log to logbook.json")

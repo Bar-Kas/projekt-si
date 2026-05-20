@@ -1,0 +1,186 @@
+\documentclass[12pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[polish]{babel}
+\usepackage{geometry}
+\geometry{a4paper, margin=2.5cm}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{enumitem}
+
+\lstset{
+    basicstyle=\ttfamily\footnotesize,
+    backgroundcolor=\color{gray!10},
+    frame=single,
+    breaklines=true,
+    showstringspaces=false,
+    language=Python,
+    commentstyle=\color{green!50!black},
+    keywordstyle=\color{blue},
+    stringstyle=\color{red!70!black},
+}
+
+\begin{document}
+
+% ===================== STRONA TYTUŁOWA =====================
+\thispagestyle{empty}
+\begin{center}
+\begin{tabular}{|p{5cm}|p{9cm}|}
+\hline
+\textbf{Uczelnia} & Politechnika Bydgoska im. J. J. Śniadeckich \\ \hline
+\textbf{Wydział} & Telekomunikacji, Informatyki i Elektrotechniki \\ \hline
+\textbf{Przedmiot} & Sztuczna Inteligencja \\ \hline
+\textbf{Tytuł projektu} & System AI do gry w Kuhn Poker oparty na sieci neuronowej i algorytmie genetycznym \\ \hline
+\textbf{Dokument} & Sprawozdanie z postępów -- Tydzień 1 \\ \hline
+\textbf{Autorzy} & [Imię i Nazwisko 1] \newline [Imię i Nazwisko 2] \\ \hline
+\textbf{Grupa} & 4 \\ \hline
+\textbf{Data} & \today \\ \hline
+\textbf{Prowadzący} & dr inż. Tomasz Talaśka \\ \hline
+\end{tabular}
+\end{center}
+\vfill
+\begin{center}
+\Large Rok akademicki 2025/2026
+\end{center}
+\newpage
+
+% ===================== 1. ZAKRES TYGODNIA =====================
+\section{Zakres prac w tygodniu 1}
+
+Celem pierwszego tygodnia było przygotowanie kompletnego szkieletu
+projektu: działającego silnika gry, mechanizmu uczenia (algorytm
+genetyczny), zestawu przeciwników odniesienia oraz jasno zdefiniowanego
+interfejsu pomiędzy częścią Osoby~1 (silnik i ewolucja) a częścią
+Osoby~2 (sieć neuronowa). Założeniem było, aby na koniec tygodnia
+system dało się uruchomić od początku do końca, nawet przed
+ukończeniem właściwej sieci neuronowej.
+
+\subsection*{Podział obowiązków}
+\begin{itemize}[nosep]
+    \item \textbf{Osoba 1}: silnik gry, kodowanie stanu, system ekspertowy,
+          strategia Nasha, algorytm genetyczny, kontrakt agenta, testy
+          jednostkowe, dokumentacja (sekcje 1--2).
+    \item \textbf{Osoba 2}: implementacja sieci neuronowej zgodnej z
+          kontraktem agenta (w trakcie), dokumentacja (sekcje 3--4).
+\end{itemize}
+
+% ===================== 2. ZREALIZOWANE ELEMENTY =====================
+\section{Zrealizowane elementy (Osoba 1)}
+
+\subsection{Silnik gry}
+Zaimplementowano pełne reguły Kuhn Poker w module \texttt{src/engine/kuhn.py}.
+Stan gry reprezentowany jest przez kartę gracza (liczba całkowita
+1--3) oraz historię akcji (łańcuch znaków, np.\ \texttt{"pb"}).
+Zdefiniowano komplet historii terminalnych wraz z wypłatami oraz
+funkcję \texttt{play\_hand}, która rozgrywa pojedyncze rozdanie między
+dwoma agentami.
+
+\subsection{Kodowanie stanu}
+Moduł \texttt{src/engine/state.py} zamienia stan gry na 12-wymiarowy
+wektor cech (one-hot karty oraz one-hot trzech pozycji historii).
+Dodano funkcje pomocnicze \texttt{build\_state\_dict} oraz
+\texttt{encode\_from\_dict} umożliwiające współpracę z enkoderem
+Osoby~2 w uzgodnionym formacie słownikowym.
+
+\subsection{Agenci odniesienia}
+W module \texttt{src/expert/baseline.py} zaimplementowano:
+\begin{itemize}[nosep]
+    \item \texttt{random\_agent} -- agent losowy,
+    \item \texttt{always\_pass\_agent}, \texttt{always\_bet\_agent} -- agenci skrajni,
+    \item \texttt{expert\_agent} -- system ekspertowy oparty na regułach,
+    \item \texttt{nash\_agent\_factory} -- strategia równowagi Nasha
+          (rodzina parametryzowana wartością $\alpha \in [0, 1/3]$).
+\end{itemize}
+
+\subsection{Algorytm genetyczny}
+W module \texttt{src/ga/} zaimplementowano funkcję fitness
+(\texttt{fitness.py}) oraz pętlę ewolucji opartą na bibliotece DEAP
+(\texttt{evolution.py}). Wykorzystano selekcję turniejową, krzyżowanie
+typu \emph{blend} oraz mutację gaussowską, z zachowaniem najlepszego
+osobnika (Hall of Fame).
+
+\subsection{Kontrakt agenta -- punkt styku z Osobą 2}
+Kluczowym elementem tygodnia było ustalenie jednolitego interfejsu
+między częściami projektu. W module \texttt{src/agent/base.py}
+zdefiniowano kontrakt, który musi spełniać każda klasa agenta:
+\begin{enumerate}[nosep]
+    \item atrybut klasowy \texttt{WEIGHT\_SIZE} -- długość genomu;
+    \item konstruktor \texttt{\_\_init\_\_(self, weights)} -- budowa agenta z wektora wag;
+    \item metoda \texttt{\_\_call\_\_(self, card, history) -> Action} -- wywoływalność instancji.
+\end{enumerate}
+Dzięki wywoływalności instancji agent neuronowy będzie zamiennikiem
+\emph{drop-in} dla agentów funkcyjnych, a sama klasa może pełnić rolę
+fabryki w algorytmie genetycznym:
+
+\begin{lstlisting}
+best, log = run_evolution(NeuralAgent.WEIGHT_SIZE, NeuralAgent, ...)
+\end{lstlisting}
+
+Jako referencyjną implementację kontraktu dostarczono klasę
+\texttt{LinearAgent} (polityka liniowa), która jednocześnie pełni rolę
+tymczasowego zamiennika sieci. Pozwala to uruchomić pełny cykl
+treningowy zanim Osoba~2 ukończy sieć neuronową.
+
+\subsection{Testy jednostkowe}
+Przygotowano 16 testów (\texttt{pytest}) pokrywających reguły gry,
+kodowanie stanu, agentów odniesienia oraz kontrakt agenta. Wszystkie
+testy przechodzą.
+
+% ===================== 3. WYNIKI WSTĘPNE =====================
+\section{Wyniki wstępne}
+
+Uruchomiono pełny cykl treningu (50 generacji, populacja 60) z
+zastępczą polityką liniową. Wytrenowany agent oceniony został w
+bezpośrednich pojedynkach (po 2000 rozdań, naprzemienne pozycje):
+
+\begin{center}
+\begin{tabular}{lr}
+\toprule
+Przeciwnik & Średnia wygrana / rozdanie \\ \midrule
+agent losowy        & $+0{,}30$ \\
+agent zawsze-bet    & $+0{,}40$ \\
+system ekspertowy   & $\approx 0$ (wynik zbliżony) \\
+strategia Nasha     & $\approx -0{,}06$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Wynik przeciwko strategii Nasha (około $-0{,}06$ żetona na rozdanie)
+jest zbieżny z teoretyczną wartością gry $-1/18 \approx -0{,}0556$, co
+stanowi wstępne potwierdzenie poprawności silnika oraz funkcji fitness.
+
+% ===================== 4. PLAN NA TYDZIEŃ 2 =====================
+\section{Plan na tydzień 2}
+\begin{itemize}[nosep]
+    \item Osoba 2: implementacja sieci neuronowej (\texttt{NeuralAgent})
+          zgodnej z kontraktem; podmiana zastępczej polityki liniowej.
+    \item Wspólnie: pierwsze pełne treningi neuroewolucji, strojenie
+          hiperparametrów (rozmiar populacji, liczba generacji, $\sigma$ mutacji).
+    \item Osoba 1: rozbudowa systemu ekspertowego, przygotowanie
+          skryptów do generowania wykresów zbieżności z pliku
+          \texttt{logbook.json}.
+    \item Dokumentacja: uzupełnienie sekcji 3 (implementacja sieci).
+\end{itemize}
+
+% ===================== 5. STAN REPOZYTORIUM =====================
+\section{Stan repozytorium}
+\begin{lstlisting}[language=bash]
+kuhn-poker-ga/
+  src/
+    engine/   kuhn.py, state.py
+    expert/   baseline.py
+    agent/    base.py, linear_agent.py, nn_agent_template.py
+    ga/       fitness.py, evolution.py
+  tests/      test_engine.py, test_agent.py   (16 testow, wszystkie zielone)
+  docs/       main.tex, sprawozdanie_tydzien1.tex
+  main.py, requirements.txt, README.md
+\end{lstlisting}
+
+Uruchomienie: \texttt{pip install -r requirements.txt}, następnie
+\texttt{python -m pytest tests/ -v} oraz \texttt{python main.py}.
+
+\end{document}
