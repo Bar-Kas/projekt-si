@@ -62,8 +62,7 @@ kuhn-poker-ga/
 ## Podział pracy
 
 - **Osoba 1**: silnik gry, GA, baseline ekspertowy, dokumentacja sekcje 1-2.
-- **Osoba 2**: sieć neuronowa zastępująca `linear_agent_from_weights`,
-  dokumentacja sekcje 3-4.
+- **Osoba 2**: sieć neuronowa zastępująca `linear_agent_from_weights`.
 
 Interfejs między modułami: funkcja `(weights: list[float]) -> agent`,
 gdzie `agent(card, history) -> Action`.

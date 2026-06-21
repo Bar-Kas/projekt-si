@@ -3,6 +3,7 @@
 from __future__ import annotations
 import json
 
+from src.agent.linear_agent import LinearAgent
 from src.expert.baseline import (
     always_bet_agent,
     expert_agent,
